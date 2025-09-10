@@ -166,8 +166,9 @@
                         let professor = professorMatch ? `${professorMatch[1]}, ${professorMatch[2]}` : 'Δεν διατίθεται';
                         
                         // Extract room
-                        const roomMatch = line.match(/αιθ\.?\s*(\w+\-?\d+|\d+)/i) || line.match(/\((\d+)\)/);
-                        let room = roomMatch ? roomMatch[0] : 'Δεν διατίθεται';
+                        const roomMatch = line.match(/αιθ\.?\s*(\w+\-?\d+|\d+)/i) || line.match(/\((\w+\-?\d+|\d+)\)/);
+                        let room = roomMatch ? roomMatch[1] : 'Δεν διατίθεται';
+                        room = room.replace(/^αιθ\.?\s*/i, '').replace(/[()]/g, '').trim();
                         
                         // Determine type
                         let type = 'lecture';
