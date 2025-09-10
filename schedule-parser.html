@@ -695,6 +695,12 @@
         let scheduleData = [];
         let currentView = 'grid';
 
+        function sanitizeText(text) {
+            const div = document.createElement('div');
+            div.textContent = text == null ? '' : String(text);
+            return div.textContent;
+        }
+
         // Mock data for demonstration
         const mockScheduleData = [
             {
@@ -859,12 +865,13 @@
         function populateFilters() {
             const professorFilter = document.getElementById('professorFilter');
             const professors = [...new Set(scheduleData.map(course => course.professor))];
-            
+
             professorFilter.innerHTML = '<option value="">All Professors</option>';
             professors.forEach(professor => {
                 const option = document.createElement('option');
-                option.value = professor;
-                option.textContent = professor;
+                const safeProfessor = sanitizeText(professor);
+                option.value = safeProfessor;
+                option.textContent = safeProfessor;
                 professorFilter.appendChild(option);
             });
         }
@@ -874,7 +881,7 @@
             const days = ['Time', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             const times = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
 
-            grid.innerHTML = '';
+            grid.textContent = '';
 
             // Add day headers
             days.forEach((day, index) => {
@@ -898,22 +905,34 @@
                     const courseCell = document.createElement('div');
                     courseCell.className = 'course-cell';
 
-                    const coursesAtTime = getFilteredData().filter(course => 
-                        course.day === dayName && 
+                    const coursesAtTime = getFilteredData().filter(course =>
+                        course.day === dayName &&
                         course.time.startsWith(time)
                     );
 
                     if (coursesAtTime.length > 0) {
                         const course = coursesAtTime[0];
-                        courseCell.className += ` ${course.type}`;
-                        courseCell.innerHTML = `
-                            <div class="course-name">${course.courseName}</div>
-                            <div class="course-details">
-                                ${course.professor}<br>
-                                ${course.room}
-                            </div>
-                        `;
-                        courseCell.title = `${course.courseName}\n${course.professor}\n${course.room}\n${course.time}`;
+                        const typeClass = sanitizeText(course.type);
+                        courseCell.className += ` ${typeClass}`;
+
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'course-name';
+                        nameDiv.textContent = sanitizeText(course.courseName);
+                        courseCell.appendChild(nameDiv);
+
+                        const detailsDiv = document.createElement('div');
+                        detailsDiv.className = 'course-details';
+                        const professorSpan = document.createElement('span');
+                        professorSpan.textContent = sanitizeText(course.professor);
+                        const br = document.createElement('br');
+                        const roomSpan = document.createElement('span');
+                        roomSpan.textContent = sanitizeText(course.room);
+                        detailsDiv.appendChild(professorSpan);
+                        detailsDiv.appendChild(br);
+                        detailsDiv.appendChild(roomSpan);
+                        courseCell.appendChild(detailsDiv);
+
+                        courseCell.title = `${sanitizeText(course.courseName)}\n${sanitizeText(course.professor)}\n${sanitizeText(course.room)}\n${sanitizeText(course.time)}`;
                     }
 
                     grid.appendChild(courseCell);
@@ -925,45 +944,57 @@
             const listContainer = document.getElementById('coursesList');
             const filteredData = getFilteredData();
 
-            listContainer.innerHTML = '';
+            listContainer.textContent = '';
 
             if (filteredData.length === 0) {
-                listContainer.innerHTML = '<p style="text-align: center; color: #666;">No courses match your filters.</p>';
+                const msg = document.createElement('p');
+                msg.style.textAlign = 'center';
+                msg.style.color = '#666';
+                msg.textContent = 'No courses match your filters.';
+                listContainer.appendChild(msg);
                 return;
             }
 
             filteredData.forEach(course => {
                 const courseCard = document.createElement('div');
-                courseCard.className = `course-card ${course.type}`;
-                courseCard.innerHTML = `
-                    <div class="course-title">${course.courseName}</div>
-                    <div class="course-info">
-                        <div class="info-item">
-                            <div class="info-label">Day</div>
-                            <div class="info-value">${course.day}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Time</div>
-                            <div class="info-value">${course.time}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Professor</div>
-                            <div class="info-value">${course.professor}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Room</div>
-                            <div class="info-value">${course.room}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Type</div>
-                            <div class="info-value">${course.type.charAt(0).toUpperCase() + course.type.slice(1)}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Semester</div>
-                            <div class="info-value">${course.semester}</div>
-                        </div>
-                    </div>
-                `;
+                const typeClass = sanitizeText(course.type);
+                courseCard.className = `course-card ${typeClass}`;
+
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'course-title';
+                titleDiv.textContent = sanitizeText(course.courseName);
+                courseCard.appendChild(titleDiv);
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'course-info';
+
+                const infoItems = [
+                    ['Day', course.day],
+                    ['Time', course.time],
+                    ['Professor', course.professor],
+                    ['Room', course.room],
+                    ['Type', course.type.charAt(0).toUpperCase() + course.type.slice(1)],
+                    ['Semester', course.semester]
+                ];
+
+                infoItems.forEach(([label, value]) => {
+                    const item = document.createElement('div');
+                    item.className = 'info-item';
+
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'info-label';
+                    labelDiv.textContent = label;
+                    item.appendChild(labelDiv);
+
+                    const valueDiv = document.createElement('div');
+                    valueDiv.className = 'info-value';
+                    valueDiv.textContent = sanitizeText(value);
+                    item.appendChild(valueDiv);
+
+                    infoDiv.appendChild(item);
+                });
+
+                courseCard.appendChild(infoDiv);
                 listContainer.appendChild(courseCard);
             });
         }
