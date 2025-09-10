@@ -3,7 +3,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 function loadDom() {
-  let html = fs.readFileSync(path.join(__dirname, '..', 'schedule-parser.html'), 'utf8');
+  let html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const idx = html.indexOf('<!DOCTYPE html>');
   if (idx !== -1) {
     html = html.slice(idx);
