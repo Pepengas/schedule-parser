@@ -1,247 +1,10 @@
 <!DOCTYPE html>
-<html>
-<head>
-</head>
-<body>
-<script>
-        async function handleFile(file) {
-            if (file.type !== 'application/pdf') {
-                showErrorMessage('Παρακαλώ επιλέξτε ένα αρχείο PDF.');
-                return;
-            }
-
-            if (file.size > 10 * 1024 * 1024) {
-                showErrorMessage('Το μέγεθος του αρχείου πρέπει να είναι μικρότερο από 10MB.');
-                return;
-            }
-
-            showLoading();
-            hideMessages();
-
-            try {
-                console.log('Starting PDF processing...');
-                
-                // Read the PDF file
-                const arrayBuffer = await file.arrayBuffer();
-                console.log('PDF loaded, extracting text...');
-                
-                const text = await extractTextFromPDF(arrayBuffer);
-                console.log('Extracted text:', text.substring(0, 500) + '...');
-                
-                // Parse the Greek schedule
-                const parsedData = parseGreekSchedule(text);
-                console.log('Parsed courses:', parsedData);
-                
-                if (parsedData.length > 0) {
-                    scheduleData = parsedData;
-                    hideLoading();
-                    displaySchedule();
-                    showSuccessMessage(`Επιτυχής ανάλυση προγράμματος από ${file.name}! Βρέθηκαν ${parsedData.length} μαθήματα.`);
-                } else {
-                    // Fallback to demo data if parsing fails
-                    scheduleData = mockScheduleData;
-                    hideLoading();
-                    displaySchedule();
-                    showSuccessMessage(`Δεν βρέθηκαν μαθήματα στο PDF. Χρησιμοποίηση δεδομένων παραδείγματος.`);
-                }
-            } catch (error) {
-                console.error('PDF processing error:', error);
-                hideLoading();
-                // Show demo data on error
-                scheduleData = mockScheduleData;
-                displaySchedule();
-                showSuccessMessage('Σφάλμα στην ανάλυση του PDF. Χρησιμοποίηση δεδομένων παραδείγματος για επίδειξη.');
-            }
-        }
-
-        // Proper PDF text extraction using PDF.js
-        async function extractTextFromPDF(arrayBuffer) {
-            try {
-                const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-                console.log('PDF loaded successfully, pages:', pdf.numPages);
-                
-                let fullText = '';
-                
-                // Extract text from all pages
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    const textContent = await page.getTextContent();
-                    
-                    let pageText = '';
-                    textContent.items.forEach(item => {
-                        pageText += item.str + ' ';
-                    });
-                    
-                    fullText += pageText + '\n';
-                    console.log(`Page ${pageNum} text length:`, pageText.length);
-                }
-                
-                console.log('Total extracted text length:', fullText.length);
-                return fullText;
-            } catch (error) {
-                console.error('Error extracting PDF text:', error);
-                throw error;
-            }
-        }
-
-        // Enhanced Greek schedule parser
-        function parseGreekSchedule(text) {
-            console.log('Starting schedule parsing...');
-            const courses = [];
-            const days = ['ΔΕΥΤΕΡΑ', 'ΤΡΙΤΗ', 'ΤΕΤΑΡΤΗ', 'ΠΕΜΠΤΗ', 'ΠΑΡΑΣΚΕΥΗ', 'ΣΑΒΒΑΤΟ'];
-            const timeRegex = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/g;
-            
-            try {
-                // Split text into lines and clean up
-                const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-                
-                let currentDay = '';
-                let currentTimeSlots = [];
-                
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    
-                    // Check for day headers
-                    const foundDay = days.find(day => line.includes(day));
-                    if (foundDay) {
-                        currentDay = foundDay;
-                        console.log('Found day:', currentDay);
-                        continue;
-                    }
-                    
-                    // Extract time slots
-                    const timeMatches = [...line.matchAll(timeRegex)];
-                    if (timeMatches.length > 0) {
-                        currentTimeSlots = timeMatches.map(match => `${match[1]}-${match[2]}`);
-                        console.log('Found time slots:', currentTimeSlots);
-                        continue;
-                    }
-                    
-                    // Look for course information
-                    if (currentDay && line.length > 10) {
-                        const courseInfo = extractCourseInfo(line, currentDay, currentTimeSlots);
-                        if (courseInfo.length > 0) {
-                            courses.push(...courseInfo);
-                        }
-                    }
-                }
-                
-                // If no courses found with time slots, try alternative parsing
-                if (courses.length === 0) {
-                    console.log('No courses found with time slots, trying alternative parsing...');
-                    const alternativeCourses = parseAlternative(text);
-                    courses.push(...alternativeCourses);
-                }
-                
-                console.log(`Total courses parsed: ${courses.length}`);
-                return courses;
-                
-            } catch (error) {
-                console.error('Schedule parsing error:', error);
-                return [];
-            }
-        }
-
-        // Extract course information from a line
-        function extractCourseInfo(line, day, timeSlots) {
-            const courses = [];
-            
-            // Course name patterns (looking for uppercase Greek text)
-            const coursePatterns = [
-                /([Α-Ω][Α-ΩΆ-Ώ\s&.\-]{10,})/g,
-                /(\d+\.\s*[Α-Ω][Α-ΩΆ-Ώ\s&.\-]{5,})/g
-            ];
-            
-            let courseMatches = [];
-            coursePatterns.forEach(pattern => {
-                const matches = [...line.matchAll(pattern)];
-                courseMatches.push(...matches);
-            });
-            
-            if (courseMatches.length > 0) {
-                courseMatches.forEach(match => {
-                    let courseName = match[1].trim();
-                    
-                    // Clean course name
-                    courseName = courseName.replace(/^\d+\.\s*/, '');
-                    courseName = courseName.replace(/[<>]/g, '').trim();
-                    
-                    if (courseName.length > 5) {
-                        // Extract professor
-                        const professorMatch = line.match(/([Α-ΩΆ-Ώα-ωάέήίόύώ]+\.?\s+[Α-ΩΆ-Ώα-ωάέήίόύώ]+),?\s*(Καθηγητής|Επ\.\s*Καθηγητής|Αν\.\s*Καθηγητής|Λέκτορας|ΕΔΙΠ|ΥΔ|Μεταδιδάκτορας)/);
-                        let professor = professorMatch ? `${professorMatch[1]}, ${professorMatch[2]}` : 'Δεν διατίθεται';
-                        
-                        // Extract room
-                        const roomMatch = line.match(/αιθ\.?\s*(\w+\-?\d+|\d+)/i) || line.match(/\((\w+\-?\d+|\d+)\)/);
-                        let room = roomMatch ? roomMatch[1] : 'Δεν διατίθεται';
-                        room = room.replace(/^αιθ\.?\s*/i, '').replace(/[()]/g, '').trim();
-                        
-                        // Determine type
-                        let type = 'lecture';
-                        if (line.includes('ΑΥ') || line.includes('ΕΔΥ') || line.includes('ΕΔΕ') || 
-                            line.includes('εργ.') || line.includes('LAB') || courseName.includes('ΕΡΓΑΣΤΗΡΙΟ')) {
-                            type = 'lab';
-                        }
-                        
-                        // Use available time slots or default
-                        const times = timeSlots.length > 0 ? timeSlots : ['09:00-11:00'];
-                        
-                        times.forEach(time => {
-                            courses.push({
-                                day: day,
-                                time: time,
-                                courseName: courseName,
-                                professor: professor,
-                                room: room,
-                                semester: 'Εαρινό Εξάμηνο 2024-25',
-                                type: type
-                            });
-                        });
-                    }
-                });
-            }
-            
-            return courses;
-        }
-
-        // Alternative parsing method
-        function parseAlternative(text) {
-            console.log('Using alternative parsing method...');
-            const courses = [];
-            
-            // Look for specific patterns in the uploaded PDF
-            const patterns = [
-                'ΤΕΧΝΟΛΟΓΙΑ ΛΟΓΙΣΜΙΚΟΥ',
-                'ΑΝΑΛΥΣΗ ΗΛΕΚΤΡΙΚΩΝ ΔΙΚΤΥΩΝ', 
-                'ΗΛΕΚΤΡΟΝΙΚΗ Ι',
-                'ΑΝΤΙΚΕΙΜΕΝΟΣΤΡΑΦΗΣ ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΣ',
-                'ΔΙΑΚΡΙΤΑ ΜΑΘΗΜΑΤΙΚΑ',
-                'ΗΛΕΚΤΡΟΜΑΓΝΗΤΙΣΜΟΣ',
-                'ΜΙΚΡΟΕΛΕΓΚΤΕΣ',
-                'ΒΑΣΕΙΣ ΔΕΔΟΜΕΝΩΝ'
-            ];
-            
-            patterns.forEach(pattern => {
-                if (text.includes(pattern)) {
-                    courses.push({
-                        day: 'ΔΕΥΤΕΡΑ',
-                        time: '09:00-11:00',
-                        courseName: pattern,
-                        professor: 'Διδάσκων',
-                        room: 'Αίθουσα',
-                        semester: 'Εαρινό Εξάμηνο 2024-25',
-                        type: 'lecture'
-                    });
-                }
-            });
-            
-            return courses;
-        }<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>University Schedule Parser</title>
+    <link rel="icon" href="data:,">
     <style>
         * {
             margin: 0;
@@ -701,6 +464,117 @@
             return div.textContent;
         }
 
+        async function extractTextFromPDF(arrayBuffer) {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                textContent.items.forEach(item => {
+                    fullText += item.str + ' ';
+                });
+                fullText += '\n';
+            }
+            return fullText;
+        }
+
+        function parseGreekSchedule(text) {
+            const courses = [];
+            const days = ['ΔΕΥΤΕΡΑ', 'ΤΡΙΤΗ', 'ΤΕΤΑΡΤΗ', 'ΠΕΜΠΤΗ', 'ΠΑΡΑΣΚΕΥΗ', 'ΣΑΒΒΑΤΟ'];
+            const timeRegex = /(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/g;
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            let currentDay = '';
+            let currentTimeSlots = [];
+            for (const line of lines) {
+                const foundDay = days.find(day => line.includes(day));
+                if (foundDay) {
+                    currentDay = foundDay;
+                    continue;
+                }
+                const timeMatches = [...line.matchAll(timeRegex)];
+                if (timeMatches.length > 0) {
+                    currentTimeSlots = timeMatches.map(match => `${match[1]}-${match[2]}`);
+                    continue;
+                }
+                if (currentDay && line.length > 10) {
+                    const courseInfo = extractCourseInfo(line, currentDay, currentTimeSlots);
+                    if (courseInfo.length > 0) {
+                        courses.push(...courseInfo);
+                    }
+                }
+            }
+            if (courses.length === 0) {
+                courses.push(...parseAlternative(text));
+            }
+            return courses;
+        }
+
+        function extractCourseInfo(line, day, timeSlots) {
+            const courses = [];
+            const coursePatterns = [
+                /([Α-Ω][Α-ΩΆ-Ώ\s&.\-]{10,})/g,
+                /(\d+\.\s*[Α-Ω][Α-ΩΆ-Ώ\s&.\-]{5,})/g
+            ];
+            let courseMatches = [];
+            coursePatterns.forEach(pattern => {
+                const matches = [...line.matchAll(pattern)];
+                courseMatches.push(...matches);
+            });
+            if (courseMatches.length > 0) {
+                courseMatches.forEach(match => {
+                    let courseName = match[1].trim();
+                    courseName = courseName.replace(/^\d+\.\s*/, '').replace(/[<>]/g, '').trim();
+                    if (courseName.length > 5) {
+                        const professorMatch = line.match(/([Α-ΩΆ-Ώα-ωάέήίόύώ]+\.?\s+[Α-ΩΆ-Ώα-ωάέήίόύώ]+),?\s*(Καθηγητής|Επ\.\s*Καθηγητής|Αν\.\s*Καθηγητής|Λέκτορας|ΕΔΙΠ|ΥΔ|Μεταδιδάκτορας)/);
+                        let professor = professorMatch ? `${professorMatch[1]}, ${professorMatch[2]}` : 'Δεν διατίθεται';
+                        const roomMatch = line.match(/αιθ\.?\s*(\w+\-?\d+|\d+)/i) || line.match(/\((\w+\-?\d+|\d+)\)/);
+                        let room = roomMatch ? roomMatch[1] : 'Δεν διατίθεται';
+                        room = room.replace(/^αιθ\.?\s*/i, '').replace(/[()]/g, '').trim();
+                        let type = 'lecture';
+                        if (line.includes('ΑΥ') || line.includes('ΕΔΥ') || line.includes('ΕΔΕ') || line.includes('εργ.') || line.includes('LAB') || courseName.includes('ΕΡΓΑΣΤΗΡΙΟ')) {
+                            type = 'lab';
+                        }
+                        const times = timeSlots.length > 0 ? timeSlots : ['09:00-11:00'];
+                        times.forEach(time => {
+                            courses.push({
+                                day: day,
+                                time: time,
+                                courseName: courseName,
+                                professor: professor,
+                                room: room,
+                                semester: 'Εαρινό Εξάμηνο 2024-25',
+                                type: type
+                            });
+                        });
+                    }
+                });
+            }
+            return courses;
+        }
+
+        function parseAlternative(text) {
+            const courses = [];
+            const patterns = [
+                'ΓΡΑΜΜΙΚΗ ΑΛΓΕΒΡΑ',
+                'ΜΙΚΡΟΕΛΕΓΚΤΕΣ',
+                'ΒΑΣΕΙΣ ΔΕΔΟΜΕΝΩΝ'
+            ];
+            patterns.forEach(pattern => {
+                if (text.includes(pattern)) {
+                    courses.push({
+                        day: 'ΔΕΥΤΕΡΑ',
+                        time: '09:00-11:00',
+                        courseName: pattern,
+                        professor: 'Διδάσκων',
+                        room: 'Αίθουσα',
+                        semester: 'Εαρινό Εξάμηνο 2024-25',
+                        type: 'lecture'
+                    });
+                }
+            });
+            return courses;
+        }
+
         // Mock data for demonstration
         const mockScheduleData = [
             {
@@ -833,23 +707,26 @@
             hideMessages();
 
             try {
-                // Simulate PDF processing
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                // In a real implementation, you would:
-                // 1. Extract text from PDF using a library like PDF.js
-                // 2. Parse the extracted text using regex or NLP
-                // 3. Structure the data into the schedule format
-                
-                scheduleData = mockScheduleData; // Using mock data for demo
-                
-                hideLoading();
-                displaySchedule();
-                showSuccessMessage(`Successfully parsed schedule from ${file.name}!`);
+                const arrayBuffer = await file.arrayBuffer();
+                const text = await extractTextFromPDF(arrayBuffer);
+                const parsedData = parseGreekSchedule(text);
+                if (parsedData.length > 0) {
+                    scheduleData = parsedData;
+                    hideLoading();
+                    displaySchedule();
+                    showSuccessMessage(`Successfully parsed schedule from ${file.name}! Found ${parsedData.length} courses.`);
+                } else {
+                    scheduleData = mockScheduleData;
+                    hideLoading();
+                    displaySchedule();
+                    showSuccessMessage(`No courses found in PDF. Using demo data.`);
+                }
             } catch (error) {
-                hideLoading();
-                showErrorMessage('Error processing PDF. Please try again.');
                 console.error('PDF processing error:', error);
+                hideLoading();
+                scheduleData = mockScheduleData;
+                displaySchedule();
+                showSuccessMessage('Error processing PDF. Using demo data for display.');
             }
         }
 

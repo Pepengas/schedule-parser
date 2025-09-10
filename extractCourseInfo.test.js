@@ -3,7 +3,8 @@ const vm = require('vm');
 const assert = require('assert');
 
 // Extract the extractCourseInfo function from the HTML file
-const html = fs.readFileSync('./schedule-parser.html', 'utf8');
+// Vercel requires an index.html file, so the main HTML was renamed accordingly
+const html = fs.readFileSync('./index.html', 'utf8');
 const match = html.match(/function extractCourseInfo\(line, day, timeSlots\) {([\s\S]*?)return courses;\n\s*}/);
 if (!match) {
   throw new Error('extractCourseInfo function not found');
